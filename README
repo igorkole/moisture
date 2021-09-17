@@ -1,0 +1,25 @@
+Soil Moisture Sensor Learning Project
+
+Components in use
+
+The Raspberry Pi Pico microcontroller board
+https://www.raspberrypi.org/products/raspberry-pi-pico/
+
+Sparkfun Soil Moisture Sensor
+https://learn.sparkfun.com/tutorials/soil-moisture-sensor-hookup-guide
+
+Connecting Pieces
+
+The sensor is connected to the board as follows
+
+SIG => 31. GP26 (ADC0)
+GND => 33. GND (AGND)
+VCC => 29. GP22
+
+Software
+
+Raspberry Pi Pico SDK
+https://github.com/raspberrypi/pico-sdk
+
+moisture.c is a program that reads the sensor's data and writes the data
+to the serial output.  The output is directed to UART0 and USB serial.
