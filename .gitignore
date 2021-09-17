@@ -6,6 +6,10 @@
 # Build artifacts
 build/
 
+# Temporary files
+# Vim swap files
+*.swp
+
 # Node artifact files
 node_modules/
 dist/
