@@ -11,7 +11,7 @@ add_executable(moisture
 	moisture.c
 )
 
-pico_enable_stdio_usb(moisture 1)
+pico_enable_stdio_usb(moisture 0)
 pico_enable_stdio_uart(moisture 1)
 
 pico_add_extra_outputs(moisture)
