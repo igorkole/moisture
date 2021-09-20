@@ -37,14 +37,29 @@ void moisture_init(void) {
 	adc_select_input(MOISTURE_ADC_IN);
 }
 
+/*
+ * How many conversions do for a single measurement.
+ */
+#define CONVERTION_COUNT 11
+
+/*
+ * Turns the ADC power on.
+ * Performs a number of conversions.
+ * Turns the power off.
+ * Returns the moisture measurement as an average of the conversions performed.
+ */
 uint16_t moisture_read(void) {
-	uint16_t val;
+	uint32_t val;
+	size_t i;
 
 	moisture_power_on();
 	sleep_ms(10);
-	val = moisture_read_sig();
+	val = 0;
+	for (i = 0; i < CONVERTION_COUNT; ++i) {
+		val += moisture_read_sig();
+	}
 	moisture_power_off();
-	return val;
+	return (uint16_t)(val / i);
 }
 
 void moisture_power_on(void) {
