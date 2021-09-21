@@ -34,7 +34,6 @@ void moisture_init(void) {
 	gpio_init(MOISTURE_PIN_POWER);
 	gpio_set_dir(MOISTURE_PIN_POWER, GPIO_OUT);
 	adc_gpio_init(MOISTURE_PIN_SIG);
-	adc_select_input(MOISTURE_ADC_IN);
 }
 
 /*
@@ -49,12 +48,12 @@ void moisture_init(void) {
  * Returns the moisture measurement as an average of the conversions performed.
  */
 uint16_t moisture_read(void) {
-	uint32_t val;
+	uint32_t val = 0;
 	size_t i;
 
 	moisture_power_on();
 	sleep_ms(10);
-	val = 0;
+	adc_select_input(MOISTURE_ADC_IN);
 	for (i = 0; i < CONVERTION_COUNT; ++i) {
 		val += moisture_read_sig();
 	}
