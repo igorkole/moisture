@@ -1,84 +1,114 @@
 #include <stdio.h>
 #include "hardware/adc.h"
 #include "hardware/gpio.h"
+#include "hardware/irq.h"
+#include "hardware/regs/intctrl.h"
 #include "pico/stdlib.h"
 
-#define MOISTURE_READ_FREQ_MS 2000
+#define MOISTURE_ADC_IN 0
 
 #define MOISTURE_PIN_POWER 22
 #define MOISTURE_PIN_SIG 26
 
-#define MOISTURE_ADC_IN 0
-
-void moisture_init(void);
-uint16_t moisture_read(void);
-void moisture_print(uint16_t val);
-void moisture_power_on(void);
-void moisture_power_off(void);
-uint16_t moisture_read_sig(void);
+static void moisture_init(void);
+static void moisture_run(void);
+static void moisture_irs_adc(void);
+static void moisture_power_on(void);
 
 int main(void) {
-	uint16_t val;
-
+	/*
+	 * Initialization
+	 */
 	moisture_init();
+	/*
+	 * Run
+	 */
+	moisture_run();
+	/*
+	 * The conversions are processing in the ADC interrupt handler,
+	 * so just sleeping here.
+	 */
 	for (;;) {
-		val = moisture_read();
-		moisture_print(val);
-		sleep_ms(MOISTURE_READ_FREQ_MS);
+		sleep_ms(1000);
 	}
 }
 
-void moisture_init(void) {
+static void moisture_init(void) {
+	/*
+	 * Standard input/output for debugging.
+	 */
 	stdio_init_all();
+	/*
+	 * ADC
+	 */
 	adc_init();
+	/*
+	 * Power pin
+	 */
 	gpio_init(MOISTURE_PIN_POWER);
 	gpio_set_dir(MOISTURE_PIN_POWER, GPIO_OUT);
+	/*
+	 * Signal pin
+	 */
 	adc_gpio_init(MOISTURE_PIN_SIG);
-}
-
-/*
- * How many conversions do for a single measurement.
- */
-#define CONVERTION_COUNT 11
-
-/*
- * Turns the ADC power on.
- * Performs a number of conversions.
- * Turns the power off.
- * Returns the moisture measurement as an average of the conversions performed.
- */
-uint16_t moisture_read(void) {
-	uint32_t val = 0;
-	size_t i;
-
-	moisture_power_on();
-	sleep_ms(10);
 	adc_select_input(MOISTURE_ADC_IN);
-	for (i = 0; i < CONVERTION_COUNT; ++i) {
-		val += moisture_read_sig();
+	/*
+	 * FIFO
+	 */
+	adc_fifo_setup(true, false, 8, true, false);
+	/*
+	 * IRQ handler
+	 */
+	irq_set_exclusive_handler(ADC_IRQ_FIFO, moisture_irs_adc);
+	irq_set_enabled(ADC_IRQ_FIFO, true);
+	/*
+	 * All set, enable ADC interrupts.
+	 */
+	adc_irq_set_enabled(true);
+}
+
+static void moisture_irs_adc(void) {
+	uint32_t sum = 0;
+	uint16_t conv;
+	uint8_t level;
+	uint8_t i;
+
+	/*
+	 * How many conversion the FIFO holds.
+	 */
+	level = adc_fifo_get_level();
+	/*
+	 * Average of them.
+	 */
+	for (i = 0; i < level; ++i) {
+		conv = adc_fifo_get();
+		if (conv & 0x1000) {
+			/*
+			 * Conversion error occured; skip it.
+			 */
+			continue;
+		}
+		sum += conv;
 	}
-	moisture_power_off();
-	return (uint16_t)(val / i);
+	conv = (uint16_t)(sum / level);
+	/*
+	 * Display the result.
+	 */
+	printf("%u\n", conv);
 }
 
-void moisture_power_on(void) {
+static void moisture_run(void) {
+	/*
+	 * Turn the ADC's power on.
+	 */
+	moisture_power_on();
+	/*
+	 * Start conversions
+	 */
+	adc_run(true);
+}
+
+static void moisture_power_on(void) {
 	gpio_put(MOISTURE_PIN_POWER, 1);
-}
-
-void moisture_power_off(void) {
-	gpio_put(MOISTURE_PIN_POWER, 0);
-}
-
-uint16_t moisture_read_sig(void) {
-	uint16_t val;
-
-	val = adc_read();
-	return val;
-}
-
-#define CONVERSION_FACTOR (3.3f / (1 << 12))
-
-void moisture_print(uint16_t val) {
-	printf("raw: %d, voltage: %gV\n",
-			val, val * CONVERSION_FACTOR);
+	sleep_ms(10);
 }

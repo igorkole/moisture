@@ -18,3 +18,4 @@ pico_add_extra_outputs(moisture)
 
 target_link_libraries(moisture pico_stdlib)
 target_link_libraries(moisture hardware_adc)
+target_link_libraries(moisture hardware_irq)
