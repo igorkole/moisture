@@ -1,114 +1,99 @@
 #include <stdio.h>
+
 #include "hardware/adc.h"
-#include "hardware/gpio.h"
-#include "hardware/irq.h"
-#include "hardware/regs/intctrl.h"
+#include "hardware/clocks.h"
 #include "pico/stdlib.h"
 
-#define MOISTURE_ADC_IN 0
+#include "ws2812.pio.h"
 
-#define MOISTURE_PIN_POWER 22
-#define MOISTURE_PIN_SIG 26
+// How often perform a conversion
+static uint const conv_freq_ms = 500;
 
-static void moisture_init(void);
-static void moisture_run(void);
-static void moisture_irs_adc(void);
-static void moisture_power_on(void);
+// ADC used
+static uint const adc = 0;
+
+// PIO and state machine for running the LED.
+static PIO const pio = pio0;
+static uint const sm = 0;
+
+// ADC raw value to voltage conversion factor.
+static float const conv_factor = 3.3f / (1 << 12);
+
+enum {
+	// LED
+	PIN_LED = 21,
+	// ADC power
+	PIN_POWER = 22,
+	// ADC signal
+	PIN_SIG = 26,
+};
+
+static void put_pixel(uint32_t grb) {
+	pio_sm_put_blocking(pio, sm, grb << 8);
+}
+
+static uint32_t ugrb(uint8_t r, uint8_t g, uint8_t b) {
+	return
+		((uint32_t)r << 8) |
+		((uint32_t)g << 16) |
+		((uint32_t)b);
+}
+
+static uint16_t map(uint16_t x,
+		uint16_t xmin, uint16_t xmax,
+		uint16_t ymin, uint16_t ymax) {
+	return (x - xmin) * (ymax - ymin) / (xmax - xmin) + ymin;
+}
+
+// Initial min/max conversion values.
+// These get updated if ADC returns smaller/bigger value.
+static int conv_min = 2400;
+static int conv_max = 3100;
+
+static void conv(void) {
+	uint16_t val = adc_read();
+	printf("raw: %u, voltage: %gV\n", val, val * conv_factor);
+
+	if (val < conv_min) conv_min = val;
+	else if (val > conv_max) conv_max = val;
+
+	uint16_t r = map(val - conv_min, 0, conv_max - conv_min, 5, 60);
+	uint16_t g = map(conv_max - val, 0, conv_max - conv_min, 5, 60);
+
+	for (int i = 0; i < 12; ++i) {
+		put_pixel(ugrb(g, r, 0));
+	}
+}
 
 int main(void) {
-	/*
-	 * Initialization
-	 */
-	moisture_init();
-	/*
-	 * Run
-	 */
-	moisture_run();
-	/*
-	 * The conversions are processing in the ADC interrupt handler,
-	 * so just sleeping here.
-	 */
-	for (;;) {
-		sleep_ms(1000);
-	}
-}
-
-static void moisture_init(void) {
-	/*
-	 * Standard input/output for debugging.
-	 */
+	// Standard input/output for debugging
 	stdio_init_all();
-	/*
-	 * ADC
-	 */
+
+	// LED pin
+	gpio_init(PIN_LED);
+	gpio_set_dir(PIN_LED, GPIO_OUT);
+
+	// ADC power pin
+	gpio_init(PIN_POWER);
+	gpio_set_dir(PIN_POWER, GPIO_OUT);
+
+	// Init ADC
 	adc_init();
-	/*
-	 * Power pin
-	 */
-	gpio_init(MOISTURE_PIN_POWER);
-	gpio_set_dir(MOISTURE_PIN_POWER, GPIO_OUT);
-	/*
-	 * Signal pin
-	 */
-	adc_gpio_init(MOISTURE_PIN_SIG);
-	adc_select_input(MOISTURE_ADC_IN);
-	/*
-	 * FIFO
-	 */
-	adc_fifo_setup(true, false, 8, true, false);
-	/*
-	 * IRQ handler
-	 */
-	irq_set_exclusive_handler(ADC_IRQ_FIFO, moisture_irs_adc);
-	irq_set_enabled(ADC_IRQ_FIFO, true);
-	/*
-	 * All set, enable ADC interrupts.
-	 */
-	adc_irq_set_enabled(true);
-}
 
-static void moisture_irs_adc(void) {
-	uint32_t sum = 0;
-	uint16_t conv;
-	uint8_t level;
-	uint8_t i;
+	// ADC signal pin
+	adc_gpio_init(PIN_SIG);
+	adc_select_input(adc);
 
-	/*
-	 * How many conversion the FIFO holds.
-	 */
-	level = adc_fifo_get_level();
-	/*
-	 * Average of them.
-	 */
-	for (i = 0; i < level; ++i) {
-		conv = adc_fifo_get();
-		if (conv & 0x1000) {
-			/*
-			 * Conversion error occured; skip it.
-			 */
-			continue;
-		}
-		sum += conv;
-	}
-	conv = (uint16_t)(sum / level);
-	/*
-	 * Display the result.
-	 */
-	printf("%u\n", conv);
-}
+	// Set up PIO for LED
+	uint offset = pio_add_program(pio, &ws2812_program);
+	ws2812_program_init(pio, sm, offset, PIN_LED, 800000, false);
 
-static void moisture_run(void) {
-	/*
-	 * Turn the ADC's power on.
-	 */
-	moisture_power_on();
-	/*
-	 * Start conversions
-	 */
-	adc_run(true);
-}
-
-static void moisture_power_on(void) {
-	gpio_put(MOISTURE_PIN_POWER, 1);
+	// Power on ADC
+	gpio_put(PIN_POWER, 1);
 	sleep_ms(10);
+
+	for (;;) {
+		conv();
+		sleep_ms(conv_freq_ms);
+	}
 }
