@@ -1,4 +1,4 @@
-Soil Moisture Sensor Learning Project
+Raspberry Pi Pico Learning Project
 
 Components in use
 
@@ -8,13 +8,10 @@ https://www.raspberrypi.org/products/raspberry-pi-pico/
 Sparkfun Soil Moisture Sensor
 https://learn.sparkfun.com/tutorials/soil-moisture-sensor-hookup-guide
 
-Connecting Pieces
+Adafruit NeoPixel Ring
+https://www.adafruit.com/product/2852
 
-The sensor is connected to the board as follows
-
-SIG => 31. GP26 (ADC0)
-GND => 33. GND (AGND)
-VCC => 29. GP22
+[A schematic of the device under test](schematic.pdf)
 
 Software
 
