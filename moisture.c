@@ -39,9 +39,9 @@ static uint32_t ugrb(uint8_t r, uint8_t g, uint8_t b) {
 		((uint32_t)b);
 }
 
-static uint16_t map(uint16_t x,
-		uint16_t xmin, uint16_t xmax,
-		uint16_t ymin, uint16_t ymax) {
+static int map(int x,
+		int xmin, int xmax,
+		int ymin, int ymax) {
 	return (x - xmin) * (ymax - ymin) / (xmax - xmin) + ymin;
 }
 
@@ -51,17 +51,35 @@ static int conv_min = 2400;
 static int conv_max = 3100;
 
 static void conv(void) {
-	uint16_t val = adc_read();
+	uint i;
+
+	// Perform a conversion
+	uint const conv_count = 11;
+	uint16_t val = 0;
+	for (i = 0; i < conv_count; ++i) {
+		val += adc_read();
+	}
+	val /= i;
 	printf("raw: %u, voltage: %gV\n", val, val * conv_factor);
 
-	if (val < conv_min) conv_min = val;
-	else if (val > conv_max) conv_max = val;
+	// Re-calibrate a bit if needed
+	if (val < conv_min) {
+		conv_min = val;
+	} else if (val > conv_max) {
+		conv_max = val;
+	}
 
-	uint16_t r = map(val - conv_min, 0, conv_max - conv_min, 5, 60);
-	uint16_t g = map(conv_max - val, 0, conv_max - conv_min, 5, 60);
-
-	for (int i = 0; i < 12; ++i) {
-		put_pixel(ugrb(g, r, 0));
+	// Update LED
+	uint const pixel_count = 12;
+	uint16_t const xmin = 0;
+	uint16_t const xmax = conv_max - conv_min;
+	uint16_t const ymin = 5;
+	uint16_t const ymax = 60;
+	uint16_t r = map(conv_max - val, xmin, xmax, ymin, ymax);
+	uint16_t g = map(val - conv_min, xmin, xmax, ymin, ymax);
+	uint16_t b = 0;
+	for (i = 0; i < pixel_count; ++i) {
+		put_pixel(ugrb(r, g, b));
 	}
 }
 
